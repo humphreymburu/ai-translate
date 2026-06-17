@@ -1,9 +1,12 @@
-name: ai-search-eval
-stack: nextjs
+name: ai-translation
+stack: nextjs-search
 version: 16
 ingress:
-  host: www.unep.org
-  weight: 799
+  host: translate-uat.unenvironment.xyz
+  weight: 850
+  paths:
+    - pathType: Prefix
+      path: /
 
 runtime:
   node: 24

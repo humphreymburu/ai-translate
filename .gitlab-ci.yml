@@ -1,0 +1,103 @@
+
+stages:
+  - prebuild
+  - asset_versioning
+  - build
+  - deploy
+
+prebuild:
+  stage: prebuild
+  image:
+    name: python:3.11-alpine
+    entrypoint: [""]
+  only:
+    - develop
+    - main
+    - master
+  artifacts:
+    paths:
+      - ./Dockerfile
+    expire_in: 1 week
+  before_script:
+    - pip install deploykit --index-url https://__token__:$GITLAB_DEPLOY_TOKEN@gitlab.com/api/v4/projects/31624139/packages/pypi/simple
+  script:
+    - deploykit prebuild
+
+install_packages:
+  stage: prebuild
+  image:
+    name: node:24-alpine
+    entrypoint: [""]
+  script:
+    - npm ci
+  cache:
+    key: ${CI_COMMIT_REF_NAME}
+    paths:
+      - node_modules/
+  artifacts:
+    paths:
+      - node_modules/
+  only:
+    refs:
+      - develop
+      - main
+      - master
+
+buildNextApp:
+  stage: asset_versioning
+  image:
+    name: node:24-alpine
+    entrypoint: [""]
+  dependencies:
+    - install_packages
+  artifacts:
+    paths:
+      - ./.next
+  only:
+    - develop
+    - main
+    - master
+  script:
+    - npm run build
+
+buildImage:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.24.0-debug
+    entrypoint: [""]
+  only:
+    - develop
+    - main
+    - master
+  dependencies:
+    - prebuild
+    - buildNextApp
+  before_script:
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - export IMAGE_TAG="$(echo $CI_COMMIT_SHA | head -c 8)"
+  script:
+    - /kaniko/executor --cache --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:$IMAGE_TAG
+
+updateHelmChart:
+  stage: deploy
+  only:
+    - develop
+    - main
+    - master
+  image:
+    name: python:3.11-alpine
+    entrypoint: [""]
+  before_script:
+    - apk update && apk add git
+    - pip install deploykit --index-url https://__token__:$GITLAB_DEPLOY_TOKEN@gitlab.com/api/v4/projects/31624139/packages/pypi/simple
+  script:
+    - export IMAGE_TAG="$(echo $CI_COMMIT_SHA | head -c 8)"
+    - export DOCKER_IMAGE_NAME=$CI_REGISTRY_IMAGE:$IMAGE_TAG
+    - git clone $UNEP_CHART_REPO deploykit && cp unep.app.yml deploykit/unep.app.yml && cd deploykit
+    - git config user.email "$GITLAB_USER_EMAIL"
+    - git config user.name "$GITLAB_USER_NAME"
+    - deploykit deploy
+    - rm unep.app.yml
+    - git add .
+    - git commit -m "[skip-ci] Release new chart version($IMAGE_TAG) for $CI_PROJECT_NAME"
+    - git push origin main
