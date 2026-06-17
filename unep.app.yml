@@ -1,0 +1,9 @@
+name: ai-search-eval
+stack: nextjs
+version: 16
+ingress:
+  host: www.unep.org
+  weight: 799
+
+runtime:
+  node: 24

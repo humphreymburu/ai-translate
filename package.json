@@ -1,0 +1,21 @@
+{
+  "name": "nova-translate",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A Next.js workbench for testing English → multilingual translations with Amazon Nova 2 Lite (Bedrock).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.726.0",
+    "dotenv": "^16.4.7",
+    "next": "^16.2.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {}
+}
