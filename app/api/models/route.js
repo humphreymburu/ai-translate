@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { MODELS, defaultBaseId, judgeBaseId, geoPrefix } from '@/lib/models'
 
-const REGION = process.env.AWS_REGION || 'us-east-1'
+const REGION = process.env.AWS_REGION || 'us-west-1'
 
 // Exposes the model registry + which baseId is the env default, so the client
 // doesn't have to know about region/CRIS resolution.

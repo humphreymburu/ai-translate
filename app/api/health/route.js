@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
+import { defaultBaseId, resolveModelId } from '@/lib/models'
 
-const REGION = process.env.AWS_REGION || 'us-east-1'
-const MODEL_ID = process.env.NOVA_MODEL_ID || 'us.amazon.nova-2-lite-v1:0'
+const REGION = process.env.AWS_REGION || 'us-west-1'
 
 export async function GET() {
-  return NextResponse.json({ ok: true, model: MODEL_ID, region: REGION })
+  const baseId = defaultBaseId()
+  const modelId = resolveModelId(baseId, REGION)
+
+  return NextResponse.json({ ok: true, baseId, model: modelId, region: REGION })
 }

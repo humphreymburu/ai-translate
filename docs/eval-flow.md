@@ -216,7 +216,7 @@ tiebreak  = coverage → latency           (deliberately NOT chrF)
 ~65.9, behind a steady 88-over-10/10. Alternatives considered: zero-fill (count
 candidate_fails as 0) is harsher and lets one transient AccessDenied tank a
 model; a lower-confidence-bound is the most defensible given the weak/noisy
-judge but least legible. Coverage-weighting is the readable middle.
+judge but lwest legible. Coverage-weighting is the readable middle.
 
 chrF is **not** the tiebreak: using the metric we trust less to adjudicate the
 one we trust more would promote the more literal/reference-hugging output, and

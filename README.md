@@ -1,7 +1,7 @@
 # Nova Translate · Workbench
 
-A small Vite + React tool for eyeballing English → multilingual translations
-from **Amazon Nova 2 Lite** on Bedrock. Type English on the left, watch the
+A small Next.js tool for eyeballing English → multilingual translations
+from **Amazon Nova Lite** on Bedrock. Type English on the left, watch the
 translation stream in on the right. Supports `es`, `ru`, `zh-hans`, `sw`,
 `pt-br`, `ar` (right-to-left), and `fr`.
 
@@ -13,16 +13,15 @@ translation stream in on the right. Supports `es`, `ru`, `zh-hans`, `sw`,
 
 ## How it works
 
-The browser **never** sees your AWS credentials. A tiny Express server
-(`server.js`) holds them and calls the Bedrock **Converse** API, streaming the
-result back to the page. Vite proxies `/api` → the Express server in dev.
+The browser **never** sees your AWS credentials. Next.js route handlers call the
+Bedrock **Converse** API server-side, streaming the result back to the page.
 
 ## Prerequisites
 
 1. **Node.js 18+**
-2. An **AWS account with Bedrock access to Nova 2 Lite**. In the Bedrock
-   console → *Model access*, request access to *Amazon Nova 2 Lite* in your
-   region (e.g. `us-east-1`).
+2. An **AWS account with Bedrock access to Amazon Nova Lite**. In the Bedrock
+   console → *Model access*, request access to *Amazon Nova Lite* in your
+   region (for this project, `eu-west-1`).
 3. AWS credentials available locally (access keys, an `aws configure` profile,
    or an IAM role).
 
@@ -30,40 +29,39 @@ result back to the page. Vite proxies `/api` → the Express server in dev.
 
 ```bash
 npm install
-cp .env.example .env      # then fill in region / credentials
+# create .env with region / credentials
 npm run dev
 ```
 
-Open the URL Vite prints (default http://localhost:5173).
-`npm run dev` starts both the Vite frontend and the Express API together.
+Open the URL Next.js prints (default http://localhost:3000).
 
 ## Configuration
 
-All config lives in `.env` (see `.env.example`):
+All config lives in `.env`:
 
 | Variable         | Purpose                                              |
 | ---------------- | ---------------------------------------------------- |
-| `AWS_REGION`     | Bedrock region, e.g. `us-east-1`                     |
-| `NOVA_MODEL_ID`  | CRIS model id — `us.`, `eu.`, or `global.` prefix    |
+| `AWS_REGION`     | Bedrock region, e.g. `eu-west-1`                     |
+| `NOVA_MODEL_ID`  | Model base id or CRIS model id                       |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | optional explicit keys  |
 | `AWS_PROFILE`    | optional named profile instead of keys               |
-| `PORT`           | Express port (default `3001`)                        |
+| `JUDGE_MODEL_ID` | Optional judge model for evals                       |
 
-> **Model id note:** Nova 2 Lite is only reachable through a cross-region
-> inference profile. Use `us.amazon.nova-2-lite-v1:0` in US regions,
-> `eu.amazon.nova-2-lite-v1:0` in EU, or `global.amazon.nova-2-lite-v1:0`.
-> A wrong prefix surfaces as a `ValidationException`.
+> **Model id note:** Nova Lite is invoked through a cross-region inference
+> profile. With `AWS_REGION=eu-west-1` and
+> `NOVA_MODEL_ID=amazon.nova-lite-v1:0`, the app invokes
+> `eu.amazon.nova-lite-v1:0`. A wrong prefix surfaces as a
+> `ValidationException`; missing model access surfaces as `AccessDeniedException`.
 
 ## Adding a language
 
-Add one entry to `src/languages.js` (set `rtl: true` for right-to-left
-scripts) and the matching display name to `LANGUAGE_NAMES` in `server.js`.
+Add one entry to `LANGUAGE_NAMES` in `lib/prompt.js` and update the UI language
+options in `app/page.jsx`.
 
 ## Scripts
 
 | Command          | What it does                              |
 | ---------------- | ----------------------------------------- |
-| `npm run dev`    | Vite + Express together (recommended)     |
-| `npm run client` | Vite frontend only                        |
-| `npm run server` | Express API only                          |
-| `npm run build`  | Production build of the frontend          |
+| `npm run dev`    | Next.js dev server                        |
+| `npm run build`  | Production build                          |
+| `npm run start`  | Production server                         |

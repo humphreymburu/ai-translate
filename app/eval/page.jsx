@@ -139,7 +139,7 @@ export default function EvalPage() {
     const chosenItems = items.filter((i) => pickedItems.has(i.id) && !i.error)
     const chosenModels = [...pickedModels]
     if (chosenItems.length === 0 || chosenModels.length === 0) {
-      setError('Pick at least one test case and one model.')
+      setError('Pick at lwest one test case and one model.')
       return
     }
     setError('')
