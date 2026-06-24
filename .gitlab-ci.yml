@@ -1,4 +1,9 @@
 
+include:
+  - project: 'unep/infra/deploykit'
+    ref: main
+    file: 'deploykit/stacks/nextjs/security-scans.yaml'
+
 stages:
   - prebuild
   - asset_versioning
