@@ -14,8 +14,8 @@
     "@aws-sdk/client-bedrock-runtime": "^3.726.0",
     "dotenv": "^16.4.7",
     "next": "^16.2.9",
+    "puppeteer": "^24.43.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
-  },
-  "devDependencies": {}
+  }
 }

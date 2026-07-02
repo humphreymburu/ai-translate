@@ -3,34 +3,14 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import Link from 'next/link'
-import { LANGUAGES, isRtl, byCode } from '@/lib/languages'
+import { LANGUAGES, UN_TARGETS, isRtl, byCode } from '@/lib/languages'
 
 const SAMPLE =
   'The quick brown fox jumps over the lazy dog.\n\n' +
   'Please confirm your appointment for next Tuesday at 3 PM — let me know if anything changes.'
 
 const SOURCES = LANGUAGES.filter((l) => l.code === 'en')
-const TARGETS = LANGUAGES.filter((l) => l.code !== 'en')
-
-function LangSelect({ value, onChange, id, label, options = LANGUAGES, disabled = false }) {
-  return (
-    <label className="lang" htmlFor={id}>
-      <span className="lang__label">{label}</span>
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-      >
-        {options.map((l) => (
-          <option key={l.code} value={l.code}>
-            {l.label} · {l.code}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
+const DEFAULT_TARGETS = ['es', 'fr']
 
 function ModelSelect({ value, onChange, models }) {
   return (
@@ -47,18 +27,105 @@ function ModelSelect({ value, onChange, models }) {
   )
 }
 
-export default function Home() {
-  const [source, setSource] = useState('en')
-  const [target, setTarget] = useState('es')
-  const [input, setInput] = useState(SAMPLE)
-  const [output, setOutput] = useState('')
-  const [status, setStatus] = useState('idle')
-  const [error, setError] = useState('')
-  const [elapsed, setElapsed] = useState(null)
+// Trigger a browser download for a Blob.
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// A short document title derived from the first non-empty source line.
+function deriveTitle(text) {
+  const first = text.split('\n').map((l) => l.trim()).find(Boolean) || ''
+  return first.length > 80 ? `${first.slice(0, 80)}…` : first
+}
+
+function ResultCard({ code, result, onCopy, onDownload }) {
+  const lang = byCode(code)
+  const rtl = isRtl(code)
+  const { text = '', status = 'idle', elapsed = null, error = '' } = result || {}
+  const busy = status === 'translating'
   const [copied, setCopied] = useState(false)
+  const [pdfState, setPdfState] = useState('idle') // idle | working | error
+
+  const copy = async () => {
+    const ok = await onCopy(text)
+    if (ok) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+  }
+
+  const download = async () => {
+    setPdfState('working')
+    try {
+      await onDownload(code)
+      setPdfState('idle')
+    } catch {
+      setPdfState('error')
+      setTimeout(() => setPdfState('idle'), 2500)
+    }
+  }
+
+  return (
+    <section className="rcard">
+      <div className="pane__head">
+        <span className="pane__lang">
+          {lang?.native} <span className="rcard__code">{code}</span>
+        </span>
+        <span className="pane__meta">
+          {status === 'done' && elapsed && <span className="ok">{elapsed}s</span>}
+          {busy && <span className="live">translating…</span>}
+          <button className="copy" onClick={copy} disabled={!text}>
+            {copied ? 'copied' : 'copy'}
+          </button>
+        </span>
+      </div>
+
+      <div className={`rcard__body ${rtl ? 'output--rtl' : ''}`} dir={rtl ? 'rtl' : 'ltr'}>
+        {error ? (
+          <p className="output__error">{error}</p>
+        ) : text ? (
+          <>
+            {text}
+            {busy && <span className="caret" />}
+          </>
+        ) : (
+          <p className="output__hint">{busy ? <span className="caret" /> : 'Waiting…'}</p>
+        )}
+      </div>
+
+      <div className="rcard__foot">
+        <button
+          className="pdfbtn"
+          onClick={download}
+          disabled={status !== 'done' || !text || pdfState === 'working'}
+        >
+          {pdfState === 'working'
+            ? 'building…'
+            : pdfState === 'error'
+              ? 'failed — retry'
+              : '↓ PDF'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
+export default function Home() {
+  const [input, setInput] = useState(SAMPLE)
+  const [targets, setTargets] = useState(DEFAULT_TARGETS)
+  const [results, setResults] = useState({}) // code -> { text, status, elapsed, error }
+  const [status, setStatus] = useState('idle') // idle | translating | done
   const [models, setModels] = useState([])
   const [model, setModel] = useState('')
-  const abortRef = useRef(null)
+  const [downloadingAll, setDownloadingAll] = useState(false)
+  const controllersRef = useRef([])
 
   useEffect(() => {
     fetch('/api/models')
@@ -70,68 +137,126 @@ export default function Home() {
       .catch(() => {})
   }, [])
 
+  const toggleTarget = (code) => {
+    setTargets((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+    )
+  }
+
+  // Stream one language's translation into results[code].
+  const translateOne = useCallback(
+    async (code, controller) => {
+      const started = performance.now()
+      setResults((prev) => ({
+        ...prev,
+        [code]: { text: '', status: 'translating', elapsed: null, error: '' },
+      }))
+      try {
+        const res = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: input, source: 'en', target: code, model }),
+          signal: controller.signal,
+        })
+
+        if (!res.ok || !res.body) {
+          let msg = `Request failed (${res.status})`
+          try {
+            const data = await res.json()
+            if (data?.error) msg = data.error
+          } catch {}
+          throw new Error(msg)
+        }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let acc = ''
+        for (;;) {
+          const { value, done } = await reader.read()
+          if (done) break
+          acc += decoder.decode(value, { stream: true })
+          setResults((prev) => ({ ...prev, [code]: { ...prev[code], text: acc } }))
+        }
+        setResults((prev) => ({
+          ...prev,
+          [code]: {
+            ...prev[code],
+            status: 'done',
+            elapsed: ((performance.now() - started) / 1000).toFixed(1),
+          },
+        }))
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          setResults((prev) => ({
+            ...prev,
+            [code]: { ...prev[code], status: prev[code]?.text ? 'done' : 'idle' },
+          }))
+          return
+        }
+        setResults((prev) => ({
+          ...prev,
+          [code]: { ...prev[code], status: 'error', error: err.message || 'Failed.' },
+        }))
+      }
+    },
+    [input, model],
+  )
+
   const translate = useCallback(async () => {
-    if (!input.trim() || status === 'translating') return
+    if (!input.trim() || targets.length === 0 || status === 'translating') return
     setStatus('translating')
-    setOutput('')
-    setError('')
-    setElapsed(null)
-    setCopied(false)
+    controllersRef.current = targets.map(() => new AbortController())
+    await Promise.all(targets.map((code, i) => translateOne(code, controllersRef.current[i])))
+    controllersRef.current = []
+    setStatus('done')
+  }, [input, targets, status, translateOne])
 
-    const started = performance.now()
-    const controller = new AbortController()
-    abortRef.current = controller
+  const stop = () => {
+    controllersRef.current.forEach((c) => c.abort())
+  }
 
+  const copyText = async (text) => {
+    if (!text) return false
     try {
-      const res = await fetch('/api/translate', {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const downloadPdf = useCallback(
+    async (code) => {
+      const text = results[code]?.text
+      if (!text) throw new Error('No translation to export.')
+      const res = await fetch('/api/pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: input, source, target, model }),
-        signal: controller.signal,
+        body: JSON.stringify({ code, title: deriveTitle(input), text }),
       })
-
-      if (!res.ok || !res.body) {
-        let msg = `Request failed (${res.status})`
+      if (!res.ok) {
+        let msg = `PDF failed (${res.status})`
         try {
           const data = await res.json()
           if (data?.error) msg = data.error
-        } catch {
-        }
+        } catch {}
         throw new Error(msg)
       }
+      saveBlob(await res.blob(), `translation-${code}.pdf`)
+    },
+    [results, input],
+  )
 
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let acc = ''
-      for (;;) {
-        const { value, done } = await reader.read()
-        if (done) break
-        acc += decoder.decode(value, { stream: true })
-        setOutput(acc)
-      }
-      setElapsed(((performance.now() - started) / 1000).toFixed(1))
-      setStatus('done')
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        setStatus(output ? 'done' : 'idle')
-        return
-      }
-      setError(err.message || 'Something went wrong.')
-      setStatus('error')
-    } finally {
-      abortRef.current = null
-    }
-  }, [input, source, target, model, status, output])
-
-  const stop = () => abortRef.current?.abort()
-
-  const copyOut = async () => {
-    if (!output) return
+  const downloadAll = async () => {
+    setDownloadingAll(true)
     try {
-      await navigator.clipboard.writeText(output)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
+      for (const code of targets) {
+        if (results[code]?.status === 'done' && results[code]?.text) {
+          await downloadPdf(code)
+        }
+      }
+    } finally {
+      setDownloadingAll(false)
     }
   }
 
@@ -142,19 +267,17 @@ export default function Home() {
     }
   }
 
+  // Reset all results when the model changes — every card is now stale.
   useEffect(() => {
-    setOutput('')
+    setResults({})
     setStatus('idle')
-    setError('')
-    setElapsed(null)
-  }, [source, target, model])
+  }, [model])
 
-  const rtlIn = isRtl(source)
-  const rtlOut = isRtl(target)
   const busy = status === 'translating'
   const chars = input.length
   const words = input.trim() ? input.trim().split(/\s+/).length : 0
   const activeModel = models.find((m) => m.baseId === model)
+  const anyDone = targets.some((c) => results[c]?.status === 'done' && results[c]?.text)
 
   return (
     <div className="app">
@@ -169,21 +292,17 @@ export default function Home() {
         </div>
 
         <div className="controls">
-          <LangSelect
-            id="src"
-            label="from"
-            value={source}
-            onChange={setSource}
-            options={SOURCES}
-            disabled
-          />
-          <LangSelect
-            id="tgt"
-            label="to"
-            value={target}
-            onChange={setTarget}
-            options={TARGETS}
-          />
+          <label className="lang" htmlFor="src">
+            <span className="lang__label">from</span>
+            <select id="src" value="en" disabled>
+              {SOURCES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label} · {l.code}
+                </option>
+              ))}
+            </select>
+          </label>
+
           {models.length > 0 && (
             <ModelSelect value={model} onChange={setModel} models={models} />
           )}
@@ -193,7 +312,11 @@ export default function Home() {
               Stop
             </button>
           ) : (
-            <button className="run" onClick={translate} disabled={!input.trim()}>
+            <button
+              className="run"
+              onClick={translate}
+              disabled={!input.trim() || targets.length === 0}
+            >
               Translate
               <kbd>⌘↵</kbd>
             </button>
@@ -201,17 +324,48 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="panes">
+      <div className="targets">
+        <span className="lang__label targets__label">into</span>
+        <div className="chips">
+          {UN_TARGETS.map((l) => {
+            const on = targets.includes(l.code)
+            return (
+              <button
+                key={l.code}
+                type="button"
+                className={`chip ${on ? 'chip--on' : ''}`}
+                aria-pressed={on}
+                onClick={() => toggleTarget(l.code)}
+                disabled={busy}
+              >
+                <span className="chip__box" aria-hidden="true">
+                  {on ? '✓' : ''}
+                </span>
+                {l.native}
+                <span className="chip__code">{l.code}</span>
+              </button>
+            )
+          })}
+        </div>
+        <button
+          className="pdfbtn pdfbtn--all"
+          onClick={downloadAll}
+          disabled={!anyDone || downloadingAll}
+        >
+          {downloadingAll ? 'building…' : '↓ Download all PDFs'}
+        </button>
+      </div>
+
+      <main className="panes panes--batch">
         <section className="pane">
           <div className="pane__head">
-            <span className="pane__lang">{byCode(source)?.native}</span>
+            <span className="pane__lang">{byCode('en')?.native}</span>
             <span className="pane__meta">
               {words} {words === 1 ? 'word' : 'words'} · {chars} chars
             </span>
           </div>
           <textarea
             className="editor"
-            dir={rtlIn ? 'rtl' : 'ltr'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onInputKeyDown}
@@ -220,46 +374,31 @@ export default function Home() {
           />
         </section>
 
-        <div className="seam" aria-hidden="true">
-          <span className={`seam__dot ${busy ? 'seam__dot--live' : ''}`} />
-        </div>
-
-        <section className="pane pane--out">
-          <div className="pane__head">
-            <span className="pane__lang">{byCode(target)?.native}</span>
-            <span className="pane__meta">
-              {status === 'done' && elapsed && <span className="ok">done · {elapsed}s</span>}
-              {busy && <span className="live">translating…</span>}
-              <button className="copy" onClick={copyOut} disabled={!output}>
-                {copied ? 'copied' : 'copy'}
-              </button>
-            </span>
-          </div>
-          <div
-            className={`output ${rtlOut ? 'output--rtl' : ''}`}
-            dir={rtlOut ? 'rtl' : 'ltr'}
-          >
-            {error ? (
-              <p className="output__error">{error}</p>
-            ) : output ? (
-              <>
-                {output}
-                {busy && <span className="caret" />}
-              </>
-            ) : (
-              <p className="output__hint">
-                {busy ? <span className="caret" /> : 'Translation will appear here.'}
-              </p>
-            )}
-          </div>
+        <section className="results" aria-live="polite">
+          {targets.length === 0 ? (
+            <p className="results__empty">Select one or more languages above to translate into.</p>
+          ) : (
+            <div className="results__grid">
+              {targets.map((code) => (
+                <ResultCard
+                  key={code}
+                  code={code}
+                  result={results[code]}
+                  onCopy={copyText}
+                  onDownload={downloadPdf}
+                />
+              ))}
+            </div>
+          )}
         </section>
       </main>
 
       <footer className="status">
         <span>
-          model <code>{activeModel?.label || model || '…'}</code> via Bedrock Converse
+          model <code>{activeModel?.label || model || '…'}</code> · {targets.length}{' '}
+          {targets.length === 1 ? 'language' : 'languages'} via Bedrock Converse
         </span>
-        <span className="status__hint">⌘/Ctrl + Enter to translate</span>
+        <span className="status__hint">⌘/Ctrl + Enter to translate all</span>
       </footer>
     </div>
   )
