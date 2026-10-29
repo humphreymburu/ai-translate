@@ -73,6 +73,10 @@ All config lives in `.env`:
 credentials the server can see, which is the quickest way to tell that a key has
 lapsed.
 
+> **Judge bias:** the eval page flags it when `JUDGE_MODEL_ID` belongs to the same
+> family as a selected candidate (e.g. Qwen scoring Qwen) — those scores inflate.
+> Prefer a different family (Claude, or Gemma via OpenRouter) for a fair ranking.
+
 ## Adding a model
 
 Add an entry to `MODELS` in `lib/models.js` with its `provider` (`bedrock` or

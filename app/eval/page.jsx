@@ -98,6 +98,7 @@ export default function EvalPage() {
   const [items, setItems] = useState([])
   const [models, setModels] = useState([])
   const [judgeModel, setJudgeModel] = useState('')
+  const [judgeFamily, setJudgeFamily] = useState('')
   const [region, setRegion] = useState('')
   const [pickedItems, setPickedItems] = useState(() => new Set())
   const [pickedModels, setPickedModels] = useState(() => new Set())
@@ -115,6 +116,7 @@ export default function EvalPage() {
         setItems(ts.items || [])
         setModels(md.models || [])
         setJudgeModel(md.judgeModel || '')
+        setJudgeFamily(md.judgeFamily || '')
         setRegion(md.region || '')
         setPickedItems(new Set((ts.items || []).map((i) => i.id)))
         // default-select the Nova + Qwen candidates (most likely to have access)
@@ -176,6 +178,11 @@ export default function EvalPage() {
   const leaderboard = useMemo(() => rankModels(aggregate(results)), [results])
 
   const evaluatedItems = items.filter((i) => results[i.id])
+
+  // Same-family judge (e.g. Qwen scoring Qwen) inflates scores — warn in the UI.
+  const judgeSharesFamily =
+    Boolean(judgeFamily) &&
+    models.some((m) => m.family === judgeFamily && pickedModels.has(m.baseId))
 
   return (
     <div className="app">
@@ -252,9 +259,19 @@ export default function EvalPage() {
               ))}
             </ul>
             <p className="muted small">
-              Judge: <code>{judgeModel || '…'}</code> · region <code>{region || '…'}</code>.
-              Set <code>JUDGE_MODEL_ID</code> to a different family (e.g. Claude) for less
-              biased ranking.
+              Judge: <code>{judgeModel || '…'}</code>
+              {judgeFamily ? ` (${judgeFamily})` : ''} · region <code>{region || '…'}</code>.{' '}
+              {judgeSharesFamily ? (
+                <span className="bad small">
+                  Same family as a selected candidate — scores are likely inflated. Set{' '}
+                  <code>JUDGE_MODEL_ID</code> to a different family for a fair ranking.
+                </span>
+              ) : (
+                <>
+                  Set <code>JUDGE_MODEL_ID</code> to a different family (e.g. Claude) for less
+                  biased ranking.
+                </>
+              )}
             </p>
           </div>
         </section>
