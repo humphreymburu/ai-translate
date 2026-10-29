@@ -147,10 +147,14 @@ shape decides where the rubric prompt is sent — no extra config flag:
         (OpenRouter, free, throttled)        or eu.amazon.nova-pro-v1:0
 ```
 
-Note: candidates (the translations) always run on Bedrock; only the **judge**
-may route to OpenRouter. The concurrency gate serializes judge calls (default 1)
-so the parallel candidate fan-out doesn't trip OpenRouter free-tier limits —
-tune with `OPENROUTER_MAX_CONCURRENCY`.
+A judge id that matches a registry model with `provider: 'qwen'` takes a third
+branch: `lib/qwen.js` → `qwenComplete()` (DashScope, OpenAI-compatible). The same
+dispatch serves the candidates, so a Qwen candidate never touches Bedrock.
+
+Note: candidates run on whichever provider their registry entry names; the
+**judge** may be Bedrock, Qwen, or OpenRouter. The concurrency gate serializes
+OpenRouter judge calls (default 1) so the parallel candidate fan-out doesn't trip
+free-tier limits — tune with `OPENROUTER_MAX_CONCURRENCY`.
 
 ## D. Timing model (why the fan-out doesn't buy what it looks like)
 

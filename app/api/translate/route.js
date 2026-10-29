@@ -1,6 +1,6 @@
 import { buildSystemPrompt, LANGUAGE_NAMES } from '@/lib/prompt'
-import { converseStream, describeError } from '@/lib/bedrock'
-import { defaultBaseId, isKnownModel, resolveModelId } from '@/lib/models'
+import { defaultBaseId, isKnownModel, providerOf, resolveModelId } from '@/lib/models'
+import { describeProviderError, translateStream } from '@/lib/providers'
 
 function jsonError(message, status = 400) {
   return new Response(JSON.stringify({ error: message }), {
@@ -24,7 +24,7 @@ export async function POST(request) {
   const systemPrompt = buildSystemPrompt(source, target)
 
   try {
-    const { chunks } = await converseStream({ baseId, system: systemPrompt, text })
+    const { chunks } = await translateStream({ baseId, system: systemPrompt, text })
 
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
@@ -45,10 +45,11 @@ export async function POST(request) {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
         'X-Model-Id': modelId,
+        'X-Provider': providerOf(baseId),
       },
     })
   } catch (err) {
     console.error('[translate] error:', err?.name, err?.message)
-    return jsonError(describeError(err, modelId), 500)
+    return jsonError(describeProviderError(err, baseId), 500)
   }
 }

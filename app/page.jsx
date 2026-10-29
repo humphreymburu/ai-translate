@@ -347,6 +347,7 @@ export default function Home() {
   const chars = input.length
   const words = input.trim() ? input.trim().split(/\s+/).length : 0
   const activeModel = models.find((m) => m.baseId === model)
+  const providerLabel = activeModel?.provider === 'qwen' ? 'Qwen (DashScope)' : 'Bedrock Converse'
   const anyDone = targets.some((c) => results[c]?.status === 'done' && results[c]?.text)
 
   return (
@@ -466,7 +467,7 @@ export default function Home() {
       <footer className="status">
         <span>
           model <code>{activeModel?.label || model || '…'}</code> · {targets.length}{' '}
-          {targets.length === 1 ? 'language' : 'languages'} via Bedrock Converse
+          {targets.length === 1 ? 'language' : 'languages'} via {providerLabel}
         </span>
         <span className="status__hint">⌘/Ctrl + Enter to translate all</span>
       </footer>

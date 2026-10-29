@@ -117,11 +117,11 @@ export default function EvalPage() {
         setJudgeModel(md.judgeModel || '')
         setRegion(md.region || '')
         setPickedItems(new Set((ts.items || []).map((i) => i.id)))
-        // default-select the Amazon Nova candidates (most likely to have access)
+        // default-select the Nova + Qwen candidates (most likely to have access)
         setPickedModels(
           new Set(
             (md.models || [])
-              .filter((m) => m.family === 'Amazon Nova')
+              .filter((m) => m.family === 'Amazon Nova' || m.family === 'Qwen')
               .map((m) => m.baseId),
           ),
         )

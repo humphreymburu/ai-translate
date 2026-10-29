@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { buildSystemPrompt, languageName } from '@/lib/prompt'
-import { converseOnce, describeError } from '@/lib/bedrock'
 import { chrf } from '@/lib/chrf'
 import { judgeTranslation } from '@/lib/judge'
-import { isKnownModel, judgeBaseId, resolveModelId, byBaseId } from '@/lib/models'
+import { isKnownModel, judgeBaseId, providerOf, resolveModelId, byBaseId } from '@/lib/models'
+import { describeProviderError, translateOnce } from '@/lib/providers'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -36,18 +36,22 @@ export async function POST(request) {
   const results = await Promise.all(
     candidates.map(async (baseId) => {
       const meta = byBaseId(baseId)
-      const base = { baseId, label: meta?.label || baseId, modelId: resolveModelId(baseId) }
+      const base = {
+        baseId,
+        label: meta?.label || baseId,
+        provider: providerOf(baseId),
+        modelId: resolveModelId(baseId),
+      }
 
       let translation
       try {
-        const out = await converseOnce({
+        translation = await translateOnce({
           baseId,
           system: systemPrompt,
           text: item.sourceText,
         })
-        translation = out
       } catch (err) {
-        return { ...base, error: describeError(err, base.modelId) }
+        return { ...base, error: describeProviderError(err, baseId) }
       }
 
       const chrfScore = item.reference ? chrf(item.reference, translation.text) : null
