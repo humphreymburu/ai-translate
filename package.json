@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "A Next.js workbench for testing English → multilingual translations with Amazon Nova Lite (Bedrock).",
+  "description": "A Next.js workbench for testing English → multilingual translations with Qwen (DashScope) and Amazon Nova (Bedrock).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -12,7 +12,7 @@ export async function GET() {
     defaultModel: defaultBaseId(),
     judgeModel: judgeBaseId(),
     // Resolve each entry up front so the client can show what will actually be
-    // invoked (e.g. eu.amazon.nova-lite-v1:0 vs qwen-plus).
+    // invoked (e.g. eu.amazon.nova-pro-v1:0 vs qwen-plus).
     models: MODELS.map((m) => ({ ...m, modelId: resolveModelId(m.baseId) })),
   })
 }

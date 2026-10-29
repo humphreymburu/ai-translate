@@ -45,7 +45,7 @@ All config lives in `.env`:
 
 | Variable                      | Purpose                                                     |
 | ----------------------------- | ----------------------------------------------------------- |
-| `DEFAULT_MODEL_ID`            | Model the workbench opens with (any registry `baseId`)       |
+| `DEFAULT_MODEL_ID`            | Model the workbench opens with (default: `qwen-plus`)        |
 | `NOVA_MODEL_ID`               | Legacy name for the default model; still honoured            |
 | `AWS_REGION`                  | Bedrock region, e.g. `eu-west-1`                             |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | optional explicit keys                       |
@@ -58,10 +58,11 @@ All config lives in `.env`:
 
 > **Model id note:** Nova models are invoked through a cross-region inference
 > profile. With `AWS_REGION=eu-west-1` and
-> `NOVA_MODEL_ID=amazon.nova-lite-v1:0`, the app invokes
-> `eu.amazon.nova-lite-v1:0`. A wrong prefix surfaces as a
+> `NOVA_MODEL_ID=amazon.nova-pro-v1:0`, the app invokes
+> `eu.amazon.nova-pro-v1:0`. A wrong prefix surfaces as a
 > `ValidationException`; missing model access surfaces as `AccessDeniedException`.
-> Qwen ids are sent as-is.
+> Qwen ids are sent as-is. Nova Lite is no longer in the registry; an unknown or
+> retired id in `DEFAULT_MODEL_ID`/`NOVA_MODEL_ID` falls back to `qwen-plus`.
 
 > **Qwen key scoping:** DashScope keys are region-scoped. An international key
 > only works against `https://dashscope-intl.aliyuncs.com` (Singapore); a China
